@@ -2,8 +2,6 @@
 
 Real-time power flow visualization for Mac. Shows adapter → battery → system → CPU/GPU power distribution as a Sankey diagram. No `sudo` required.
 
-![PowerFlow](PowerFlow.png)
-
 ## Installation
 
 Download `PowerFlow.dmg` from the [Releases](https://github.com/ozp3/PowerFlow/releases) page, open it, and drag the app into your **Applications** folder.
