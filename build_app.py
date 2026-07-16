@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-.app bundle oluşturucu – PowerFlow Widget
-Çalıştır: python3 build_app.py
-Çıktı:    dist/PowerFlow.app
+.app bundle builder – PowerFlow
+Run:    python3 build_app.py
+Output: dist/PowerFlow.app
 """
 
 import os, shutil, stat
@@ -14,7 +14,7 @@ CONTENTS = os.path.join(APP_PATH, "Contents")
 MACOS   = os.path.join(CONTENTS, "MacOS")
 RESOURCES = os.path.join(CONTENTS, "Resources")
 
-# 1. Temizle ve dizinleri oluştur
+# 1. Clean and create directories
 if os.path.exists(APP_PATH):
     shutil.rmtree(APP_PATH)
 
@@ -22,8 +22,8 @@ for d in [MACOS, RESOURCES]:
     os.makedirs(d)
     print(f"  ✓ {d}")
 
-# 2. Kaynak dosyaları kopyala
-# macmon binary'sini de bundle'a kopyala
+# 2. Copy resource files
+# Bundle the macmon binary as well
 macmon_src = "/opt/homebrew/bin/macmon"
 macmon_dst = os.path.join(RESOURCES, "macmon")
 if os.path.exists(macmon_src):
@@ -37,23 +37,23 @@ for fname in ["app.py", "server.py", "index.html", "d3.v7.min.js", "d3-sankey.mi
     shutil.copy2(src, dst)
     print(f"  ✓ {fname} → Resources/")
 
-# 3. Launcher script oluştur
+# 3. Create launcher script
 LAUNCHER = os.path.join(MACOS, APP_NAME)
 PYTHON = "/Library/Frameworks/Python.framework/Versions/3.14/bin/python3"
 
 with open(LAUNCHER, "w") as f:
     f.write(f'''#!/bin/bash
-# PowerFlow – bağımsız pencereli uygulama başlatıcısı
+# PowerFlow – standalone windowed app launcher
 
 APP_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 RESOURCES="$APP_DIR/Resources"
 cd "$RESOURCES"
 
-# Python bul: framework kurulumu > PATH > sistem
+# Find Python: framework install > PATH > system
 PY="{PYTHON}"
 if [ ! -x "$PY" ]; then PY="$(command -v python3 || echo /usr/bin/python3)"; fi
 
-# exec: aynı PID'de çalışsın ki macOS pencereyi bu bundle ile eşleştirsin
+# exec: keep the same PID so macOS associates the window with this bundle
 LOG="$HOME/Library/Logs/PowerFlow.log"
 exec "$PY" "$RESOURCES/app.py" >>"$LOG" 2>&1
 ''')
@@ -97,14 +97,14 @@ with open(PLIST, "w") as f:
 </plist>''')
 print(f"  ✓ Info.plist")
 
-# 5. İkon kopyala (PowerFlow.icns)
+# 5. Copy icon (PowerFlow.icns)
 icon_src = os.path.join(SCRIPT_DIR, "PowerFlow.icns")
 if os.path.exists(icon_src):
     shutil.copy2(icon_src, os.path.join(RESOURCES, "icon.icns"))
     print(f"  ✓ icon.icns → Resources/")
 else:
-    print(f"  ⚠ PowerFlow.icns bulunamadı, ikon atlandı")
+    print(f"  ⚠ PowerFlow.icns not found, skipping icon")
 
 print(f"\n✅ {APP_PATH}")
-print(f"   Finder'da çift tıkla, Dock'a sürükle, veya")
+print(f"   Double-click in Finder, drag to the Dock, or run")
 print(f"   open '{APP_PATH}'")

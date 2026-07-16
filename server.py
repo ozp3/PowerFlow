@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-PowerFlow — Mac güç izleme (macmon + pmset + ioreg, sudo'suz)
-Kullanım: python3 server.py  →  http://localhost:8765
+PowerFlow — Mac power monitoring (macmon + pmset + ioreg, no sudo)
+Usage: python3 server.py  →  http://localhost:8765
 """
 
 import http.server, json, os, re, subprocess, threading, time
@@ -26,7 +26,7 @@ def _macmon_bin():
 
 
 def macmon_reader():
-    """macmon pipe'dan JSON oku (sürekli, sudo'suz)"""
+    """Read JSON from the macmon pipe (continuous, no sudo)"""
     global _macmon
     while True:
         try:
@@ -35,7 +35,7 @@ def macmon_reader():
                 stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True
             )
         except OSError:
-            time.sleep(10)  # macmon yok, tahmini değerlerle devam
+            time.sleep(10)  # macmon missing, keep using estimated values
             continue
         for line in proc.stdout:
             try:
@@ -44,13 +44,13 @@ def macmon_reader():
                 with _mm_lock:
                     _macmon = {
                         "sys_power": d.get("sys_power", 7.0),
-                        # macmon cpu_usage_pct 0-1 arası oran döndürür → yüzdeye çevir
+                        # macmon reports cpu_usage_pct as a 0-1 ratio → convert to percent
                         "cpu_usage": d.get("cpu_usage_pct", 0.2) * 100.0,
                         "cpu_temp": temp.get("cpu_temp_avg", 40.0),
                     }
             except (json.JSONDecodeError, KeyError, TypeError):
                 pass
-        time.sleep(2)  # macmon kapandı, yeniden başlat
+        time.sleep(2)  # macmon exited, restart it
 
 
 def get_macmon():
@@ -70,7 +70,7 @@ def cmd(args, timeout=4):
 
 
 def poll_battery():
-    """pmset + ioreg → batarya durumu"""
+    """pmset + ioreg → battery state"""
     d = {}
     ps   = cmd(["pmset","-g","ps"])
     batt = cmd(["pmset","-g","batt"])
@@ -120,27 +120,27 @@ def poll_loop():
             v_mv  = bat.get("voltage_mv", 0)
             i_ma  = bat.get("current_ma", 0)
 
-            # Batarya gücü (SMC ~10sn gecikmeli)
+            # Battery power (SMC lags by ~10s)
             bat_w = round(abs((v_mv/1000) * (i_ma/1000)), 2) if v_mv else 0
 
-            # macmon'dan gerçek zamanlı sistem gücü (SMC PSTR key, anlık)
+            # Real-time system power from macmon (SMC PSTR key, instant)
             sys_raw = mm["sys_power"]
             cpu_pct = mm["cpu_usage"]
 
-            # Sistem gücü
-            OVERHEAD = 5.0  # ekran+ssd+fan minimum
+            # System power
+            OVERHEAD = 5.0  # display+ssd+fan baseline
             if src == "Battery":
                 if bat_w > 1.0:
                     _cached_system = bat_w
                 system_power = _cached_system
                 charge_power = 0.0
             else:
-                # AC: macmon sys_power gerçek değer
+                # AC: macmon sys_power is the real value
                 system_power = sys_raw
 
-                # Transition: Battery→AC → SMC henüz şarjı göstermiyor, varsay
+                # Transition: Battery→AC → SMC doesn't report charging yet, assume it
                 if src != _last_src and _last_src == "Battery":
-                    chg = True  # adaptör takıldı, şarj oluyor varsay
+                    chg = True  # adapter just plugged in, assume charging
 
                 if chg and i_ma > 100:
                     charge_power = bat_w
@@ -157,7 +157,7 @@ def poll_loop():
                 charge_power *= ratio
                 adapter_total = adapt
 
-            # CPU/GPU split (cpu_usage % ile orantılı)
+            # CPU/GPU split (proportional to cpu_usage %)
             total_w = system_power
             dynamic = max(0.5, total_w - OVERHEAD)
             if cpu_pct > 1:
@@ -257,11 +257,11 @@ def main():
     print(f"   macmon sys_power: {mm['sys_power']:.1f}W | cpu: {mm['cpu_usage']:.0f}% | temp: {mm['cpu_temp']:.0f}°C")
 
     httpd = http.server.HTTPServer(("0.0.0.0", PORT), Handler)
-    print("   Ctrl+C ile kapat\n")
+    print("   Press Ctrl+C to quit\n")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
-        print("\n👋 Kapatıldı")
+        print("\n👋 Stopped")
 
 
 if __name__ == "__main__":

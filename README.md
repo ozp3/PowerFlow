@@ -1,32 +1,32 @@
 # ⚡ PowerFlow
 
-Mac için gerçek zamanlı güç akışı görselleştirmesi. Adaptör → batarya → sistem → CPU/GPU güç dağılımını Sankey diyagramı olarak gösterir. `sudo` gerektirmez.
+Real-time power flow visualization for Mac. Shows adapter → battery → system → CPU/GPU power distribution as a Sankey diagram. No `sudo` required.
 
 ![PowerFlow](PowerFlow.png)
 
-## Kurulum
+## Installation
 
-[Releases](https://github.com/ozp3/PowerFlow/releases) sayfasından `PowerFlow.dmg` dosyasını indir, aç ve uygulamayı **Applications** klasörüne sürükle.
+Download `PowerFlow.dmg` from the [Releases](https://github.com/ozp3/PowerFlow/releases) page, open it, and drag the app into your **Applications** folder.
 
-> Gereksinimler: macOS 12+, [Python 3](https://www.python.org/downloads/) ve `pip3 install pywebview`
+> Requirements: macOS 12+, [Python 3](https://www.python.org/downloads/) and `pip3 install pywebview`
 
-## Kaynaktan çalıştırma
+## Running from source
 
 ```bash
-# Bağımsız pencereli uygulama
+# Standalone windowed app
 python3 app.py
 
-# veya tarayıcıda (http://localhost:8765)
+# or in the browser (http://localhost:8765)
 python3 server.py
 ```
 
-## Veri kaynakları
+## Data sources
 
-- **[macmon](https://github.com/vladkens/macmon)** – gerçek zamanlı SMC sistem gücü, CPU kullanımı ve sıcaklık (sudo'suz)
-- **pmset** – güç kaynağı (AC/batarya), şarj durumu
-- **ioreg** – batarya voltajı/akımı, adaptör gücü
+- **[macmon](https://github.com/vladkens/macmon)** – real-time SMC system power, CPU usage and temperature (no sudo)
+- **pmset** – power source (AC/battery), charging state
+- **ioreg** – battery voltage/current, adapter wattage
 
-## Derleme
+## Building
 
 ```bash
 python3 build_app.py   # dist/PowerFlow.app

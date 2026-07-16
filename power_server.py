@@ -1,19 +1,19 @@
 #!/usr/bin/env python3
 """
-Mac Güç Sankey – Gerçek zamanlı güç akışı görselleştirmesi.
+Mac Power Sankey – real-time power flow visualization.
 
-Kullanım:
+Usage:
     python3 power_server.py
-    tarayıcıda: http://localhost:8765
+    then open in a browser: http://localhost:8765
 
-    veya direkt olarak index.html dosyasını tarayıcıda aç:
-    open index.html   (ama bu durumda API olmadan çalışmaz)
+    or open index.html directly in a browser:
+    open index.html   (but it won't work without the API)
 
-Veri kaynakları:
-    pmset          – güç kaynağı (AC/Batarya), şarj yüzdesi
-    system_profiler – adaptör watt değeri
-    ioreg          – batarya voltajı, akımı, adaptör detayı
-    powermetrics   – CPU/GPU/ANE güç kırılımı (sudo gerekir)
+Data sources:
+    pmset           – power source (AC/battery), charge percentage
+    system_profiler – adapter wattage
+    ioreg           – battery voltage, current, adapter details
+    powermetrics    – CPU/GPU/ANE power breakdown (requires sudo)
 """
 
 import http.server
@@ -233,7 +233,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 with open(HTML_PATH, "rb") as f:
                     body = f.read()
             except FileNotFoundError:
-                body = b"<h1>index.html bulunamadi</h1>"
+                body = b"<h1>index.html not found</h1>"
             self.send_response(200)
             self.send_header("Content-Type", "text/html; charset=utf-8")
             self.send_header("Content-Length", str(len(body)))
@@ -250,34 +250,34 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 def main():
     print("=" * 56)
-    print("  ⚡  Mac Güç Sankey – Gerçek Zamanlı")
+    print("  ⚡  Mac Power Sankey – Real-Time")
     print("=" * 56)
-    print(f"  →  Tarayıcı:  http://localhost:{PORT}")
-    print(f"  →  API:       http://localhost:{PORT}/api/power")
-    print(f"  →  Çıkmak:    Ctrl+C")
+    print(f"  →  Browser:  http://localhost:{PORT}")
+    print(f"  →  API:      http://localhost:{PORT}/api/power")
+    print(f"  →  Quit:     Ctrl+C")
     print()
 
     # Initial poll
-    print("  İlk ölçüm yapılıyor...")
+    print("  Taking first measurement...")
     try:
         initial = poll()
         with _lock:
             _latest.update(initial)
-        print(f"  ✓ Adaptör: {initial['adapter_watts']}W | "
-              f"Batarya: %{initial['battery_pct']} | "
-              f"Kaynak: {initial['power_source']} | "
-              f"Şarj: {'Evet' if initial['battery_charging'] else 'Hayır'}")
+        print(f"  ✓ Adapter: {initial['adapter_watts']}W | "
+              f"Battery: {initial['battery_pct']}% | "
+              f"Source: {initial['power_source']} | "
+              f"Charging: {'Yes' if initial['battery_charging'] else 'No'}")
         if initial["has_detailed"]:
             print(f"  ✓ CPU: {initial['cpu_power_w']}W | "
                   f"GPU: {initial['gpu_power_w']}W | "
                   f"ANE: {initial['ane_power_w']}W")
         else:
-            print(f"  ⚠ CPU/GPU kırılımı yok (sudo powermetrics çalışamadı)")
-            print(f"    Şifresiz sudo için:")
+            print(f"  ⚠ No CPU/GPU breakdown (sudo powermetrics unavailable)")
+            print(f"    For passwordless sudo:")
             print(f"    echo '$(whoami) ALL=(ALL) NOPASSWD: /usr/bin/powermetrics' | sudo tee /etc/sudoers.d/powermetrics")
-        print(f"  ✓ Tahmini sistem tüketimi: {initial['total_power_w']}W")
+        print(f"  ✓ Estimated system power: {initial['total_power_w']}W")
     except Exception as e:
-        print(f"  ⚠ İlk ölçüm hatası: {e}")
+        print(f"  ⚠ First measurement failed: {e}")
 
     # Background poller
     threading.Thread(target=poll_loop, daemon=True).start()
@@ -285,11 +285,11 @@ def main():
     # HTTP server
     server = http.server.HTTPServer(("0.0.0.0", PORT), Handler)
     print(f"\n  🌐 http://localhost:{PORT}")
-    print("  (Ctrl+C ile kapat)\n")
+    print("  (Press Ctrl+C to quit)\n")
     try:
         server.serve_forever()
     except KeyboardInterrupt:
-        print("\n  👋 Kapatıldı.")
+        print("\n  👋 Stopped.")
         server.shutdown()
 
 

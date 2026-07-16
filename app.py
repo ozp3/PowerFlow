@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-PowerFlow – bağımsız masaüstü uygulaması (pywebview penceresi).
-server.py'nin veri altyapısını kullanır, tarayıcı yerine kendi penceresini açar.
-Kullanım: python3 app.py
+PowerFlow – standalone desktop app (pywebview window).
+Reuses server.py's data pipeline but opens its own window instead of a browser.
+Usage: python3 app.py
 """
 
 import http.server
@@ -14,11 +14,11 @@ import server
 
 
 def main():
-    # Veri toplayıcılar (macmon + pmset/ioreg)
+    # Data collectors (macmon + pmset/ioreg)
     threading.Thread(target=server.macmon_reader, daemon=True).start()
     threading.Thread(target=server.poll_loop, daemon=True).start()
 
-    # HTTP sunucusu: port 0 → boş bir port seçilir, çakışma olmaz
+    # HTTP server: port 0 → picks a free port, no conflicts
     httpd = http.server.HTTPServer(("127.0.0.1", 0), server.Handler)
     port = httpd.server_address[1]
     threading.Thread(target=httpd.serve_forever, daemon=True).start()

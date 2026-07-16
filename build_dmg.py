@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-DMG oluşturucu – PowerFlow
-Çıktı: dist/PowerFlow.dmg
+DMG builder – PowerFlow
+Output: dist/PowerFlow.dmg
 """
 
 import os, shutil, subprocess
@@ -14,7 +14,7 @@ TMP_DMG  = os.path.join(SCRIPT_DIR, "dist", f"{APP_NAME}_tmp.dmg")
 STAGING  = os.path.join(SCRIPT_DIR, "dist", "dmg_staging")
 
 # 1. Clean
-# Eski bir PowerFlow diski bağlıysa (ör. kullanıcı DMG'yi açık bırakmışsa) ayır
+# Detach any stale PowerFlow volume (e.g. the user left an old DMG mounted)
 if os.path.ismount(f"/Volumes/{APP_NAME}"):
     subprocess.run(["diskutil", "unmount", "force", f"/Volumes/{APP_NAME}"],
                    capture_output=True)
@@ -48,9 +48,9 @@ subprocess.run([
 mount = f"/Volumes/{APP_NAME}"
 att = subprocess.run(["hdiutil", "attach", TMP_DMG, "-readwrite", "-noverify", "-noautoopen",
                       "-mountpoint", mount], check=True, capture_output=True, text=True)
-dev = att.stdout.split()[0]  # /dev/diskN — detach için cihaz düğümü
+dev = att.stdout.split()[0]  # /dev/diskN — device node used for detaching
 
-# AppleScript ile pencere ayarları (arka plan resmi YOK, temiz görünüm)
+# Finder window settings via AppleScript (no background image, clean look)
 scpt = f'''
 tell application "Finder"
     tell disk "{APP_NAME}"
@@ -78,7 +78,7 @@ with open(sp, "w") as f: f.write(scpt)
 subprocess.run(["osascript", sp], check=False, capture_output=True)
 os.remove(sp)
 
-# 5. Detach & convert (Finder diski bir süre meşgul tutabilir → tekrar dene)
+# 5. Detach & convert (Finder can keep the disk busy for a while → retry)
 import time
 for attempt in range(10):
     r = subprocess.run(["hdiutil", "detach", dev], capture_output=True)
@@ -87,6 +87,7 @@ for attempt in range(10):
     time.sleep(1)
 else:
     subprocess.run(["diskutil", "eject", "force", dev], check=True, capture_output=True)
+
 subprocess.run(["hdiutil", "convert", TMP_DMG, "-format", "UDZO",
                 "-imagekey", "zlib-level=9", "-o", DMG_PATH], check=True, capture_output=True)
 

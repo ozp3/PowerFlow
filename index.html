@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -53,11 +53,11 @@
     if (ac && chg) {
       return {
         nodes: [
-          {id:'adapter', icon:'🔌', label:'Adaptör', color:'#0071e3'},
-          {id:'battery', icon:'🔋', label:'Batarya', color:'#34c759'},
-          {id:'system',  icon:'💻', label:'Sistem',  color:'#1d1d1f'},
+          {id:'adapter', icon:'🔌', label:'Adapter', color:'#0071e3'},
+          {id:'battery', icon:'🔋', label:'Battery', color:'#34c759'},
+          {id:'system',  icon:'💻', label:'System',  color:'#1d1d1f'},
           {id:'soc',     icon:'⚙', label:'CPU/GPU',  color:'#ff6b35'},
-          {id:'other',   icon:'⋯', label:'Diğer',    color:'#af52de'},
+          {id:'other',   icon:'⋯', label:'Other',    color:'#af52de'},
         ],
         links: [
           {source:'adapter', target:'battery', value: batW, color: '#34c759'},
@@ -69,10 +69,10 @@
     } else if (ac) {
       return {
         nodes: [
-          {id:'adapter', icon:'🔌', label:'Adaptör', color:'#0071e3'},
-          {id:'system',  icon:'💻', label:'Sistem',  color:'#1d1d1f'},
+          {id:'adapter', icon:'🔌', label:'Adapter', color:'#0071e3'},
+          {id:'system',  icon:'💻', label:'System',  color:'#1d1d1f'},
           {id:'soc',     icon:'⚙', label:'CPU/GPU',  color:'#ff6b35'},
-          {id:'other',   icon:'⋯', label:'Diğer',    color:'#af52de'},
+          {id:'other',   icon:'⋯', label:'Other',    color:'#af52de'},
         ],
         links: [
           {source:'adapter', target:'system', value: sysPwr, color: '#0071e3'},
@@ -83,10 +83,10 @@
     } else {
       return {
         nodes: [
-          {id:'battery', icon:'🔋', label:'Batarya', color:'#34c759'},
-          {id:'system',  icon:'💻', label:'Sistem',  color:'#1d1d1f'},
+          {id:'battery', icon:'🔋', label:'Battery', color:'#34c759'},
+          {id:'system',  icon:'💻', label:'System',  color:'#1d1d1f'},
           {id:'soc',     icon:'⚙', label:'CPU/GPU',  color:'#ff6b35'},
-          {id:'other',   icon:'⋯', label:'Diğer',    color:'#af52de'},
+          {id:'other',   icon:'⋯', label:'Other',    color:'#af52de'},
         ],
         links: [
           {source:'battery', target:'system', value: sysPwr, color: '#34c759'},
@@ -98,12 +98,12 @@
   }
 
   function render(data) {
-    if (!data || data.total_w == null) return;  // sunucu ilk ölçümü henüz yapmadı
+    if (!data || data.total_w == null) return;  // server hasn't finished its first poll yet
     document.getElementById('srcIcon').textContent = data.power_source === 'AC' ? '🔌' : '🔋';
     var chg = data.battery_charging && data.power_source === 'AC';
     document.getElementById('srcText').textContent = data.power_source === 'AC'
-      ? 'Adaptör · '+data.adapter_watts+'W' + (chg ? ' · Şarj oluyor' : '') + ' · Batarya %'+data.battery_pct
-      : 'Pilde · Batarya %'+data.battery_pct;
+      ? 'Adapter · '+data.adapter_watts+'W' + (chg ? ' · Charging' : '') + ' · Battery '+data.battery_pct+'%'
+      : 'On battery · '+data.battery_pct+'%';
     document.getElementById('clock').textContent = data.ts;
 
     var g = build(data);
@@ -186,10 +186,10 @@
       .text(function(d){return d.label;});
 
     document.getElementById('stats').innerHTML = [
-      {v:data.total_w.toFixed(1)+'W', l:'Toplam'},
+      {v:data.total_w.toFixed(1)+'W', l:'Total'},
       {v:(data.cpu_w+data.gpu_w).toFixed(1)+'W', l:'CPU+GPU'},
-      {v:data.other_w.toFixed(1)+'W', l:'Diğer'},
-      {v:'%'+data.battery_pct, l:'Batarya'}
+      {v:data.other_w.toFixed(1)+'W', l:'Other'},
+      {v:data.battery_pct+'%', l:'Battery'}
     ].map(function(s){return'<div class="st"><div class="v">'+s.v+'</div><div class="l">'+s.l+'</div></div>';}).join('');
   }
 

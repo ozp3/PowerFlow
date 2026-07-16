@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Mac Güç Sankey Widget – Masaüstü paneli.
-Kullanım: python3 widget.py
+Mac Power Sankey Widget – desktop panel.
+Usage: python3 widget.py
 """
 
 import os, sys, json, time, threading, subprocess, re, http.server
@@ -29,7 +29,7 @@ def sudo(cmd, timeout=4):
     except: return ""
 
 def poll_fast():
-    """Hızlı metrikler: pmset, ioreg (~200ms)"""
+    """Fast metrics: pmset, ioreg (~200ms)"""
     result = {}
     ps = run(["pmset","-g","ps"])
     batt = run(["pmset","-g","batt"])
@@ -56,14 +56,14 @@ def poll_fast():
     return result
 
 def poll_powermetrics():
-    """Cache'lenmiş powermetrics verisi (arka plan thread günceller)"""
+    """Cached powermetrics data (updated by a background thread)"""
     with _pm_lock:
         return dict(_powermetrics_cache["data"])
 
 _cached_system_power = 8.0
 _last_source = "unknown"
 _transition_at = 0.0
-_TRANSITION_GRACE = 8.0  # SMC gecikmesi için 8 sn tolerans
+_TRANSITION_GRACE = 8.0  # 8s tolerance for SMC lag
 
 def build_result(fast, pm):
     global _cached_system_power, _last_source, _transition_at
@@ -86,7 +86,7 @@ def build_result(fast, pm):
     bat_power = round(abs(bv*bi),2)
     r["battery_power_w"] = bat_power
 
-    # Geçiş algılama: SMC 10sn gecikmeli, anında tepki ver
+    # Transition detection: SMC lags ~10s, react immediately
     src = r["power_source"]
     now = time.time()
     if src != _last_source and _last_source != "unknown":
@@ -95,18 +95,18 @@ def build_result(fast, pm):
 
     in_transition = (now - _transition_at) < _TRANSITION_GRACE
 
-    # Adaptöre yeni takıldı → batarya şarj oluyor varsay
+    # Adapter just plugged in → assume the battery is charging
     if in_transition and src == "AC":
         r["battery_charging"] = True
-    # Adaptörden yeni çıkıldı → batarya deşarjda
+    # Adapter just unplugged → battery is discharging
     if in_transition and src == "Battery":
         r["battery_charging"] = False
 
-    # SMC güncel değeri geldiyse transition'ı iptal et
+    # Cancel the transition once fresh SMC data arrives
     if r["battery_current_ma"] > 200 and src == "AC":
-        _transition_at = 0  # gerçek şarj akımı gelmiş, transition bitti
+        _transition_at = 0  # real charge current observed, transition over
     if r["battery_current_ma"] < -200 and src == "Battery":
-        _transition_at = 0  # gerçek deşarj akımı gelmiş
+        _transition_at = 0  # real discharge current observed
 
     cpu_mw = pm.get("cpu_power_mw")
     if cpu_mw is not None:
@@ -115,31 +115,31 @@ def build_result(fast, pm):
         r["ane_power_w"] = round(pm.get("ane_power_mw",0)/1000,2)
         r["has_detailed"] = True
 
-    # SoC gücü (powermetrics, 2sn'de bir güncellenir)
+    # SoC power (powermetrics, updated every 2s)
     soc_measured = r["cpu_power_w"] + r["gpu_power_w"] + r["ane_power_w"]
 
-    # Sabit baz tüketim: ekran ~3W, SSD/fan/WiFi ~3W, ısı ~1W
+    # Fixed base draw: display ~3W, SSD/fan/WiFi ~3W, heat ~1W
     fixed_overhead = 7.0
 
     if soc_measured > 0.5:
-        # powermetrics çalışıyor → hızlı güncelleme
+        # powermetrics is working → fast updates
         r["cpu_power_w"] = max(r["cpu_power_w"], 0.1)
         r["gpu_power_w"] = max(r["gpu_power_w"], 0.1)
         estimated_total = soc_measured + fixed_overhead
     else:
-        # powermetrics yok → sabit tahmin
+        # no powermetrics → fixed estimate
         r["cpu_power_w"] = round(fixed_overhead * 0.4, 2)
         r["gpu_power_w"] = round(fixed_overhead * 0.2, 2)
         estimated_total = fixed_overhead + r["cpu_power_w"] + r["gpu_power_w"]
 
-    # Batarya telemetrisi (SMC, ~10sn) → kalibrasyon
+    # Battery telemetry (SMC, ~10s) → calibration
     if r["power_source"] == "Battery" and bat_power > 1.0:
-        # Batarya deşarjı gerçek toplam, yavaşça buna yaklaş
+        # Battery discharge is the real total, converge toward it slowly
         _cached_system_power = _cached_system_power * 0.7 + bat_power * 0.3
     elif r["power_source"] == "AC" and r["battery_charging"] and bi > 0.1:
         _cached_system_power = _cached_system_power * 0.7 + (estimated_total + bat_power) * 0.3
     else:
-        # Adaptörde, şarj yok → estimated_total'a yavaşça yaklaş
+        # On adapter, not charging → converge toward estimated_total slowly
         _cached_system_power = _cached_system_power * 0.7 + estimated_total * 0.3
 
     total = round(_cached_system_power, 2)
@@ -147,14 +147,14 @@ def build_result(fast, pm):
     r["display_power_w"] = 0
     r["heat_loss_w"] = 0
 
-    # Diğer = total - CPU/GPU (tam denge)
+    # Other = total - CPU/GPU (exact balance)
     real_soc = r["cpu_power_w"] + r["gpu_power_w"] + r["ane_power_w"]
     r["other_power_w"] = round(max(0.5, total - real_soc), 2)
 
     return r
 
 def poll_fast_loop():
-    """Hızlı metrikler: her 500ms"""
+    """Fast metrics: every 500ms"""
     global _latest
     while True:
         try:
@@ -168,7 +168,7 @@ def poll_fast_loop():
 
 
 def poll_slow_loop():
-    """powermetrics arka planda, poll_fast_loop'u bloklamadan"""
+    """powermetrics in the background, without blocking poll_fast_loop"""
     while True:
         try:
             data = {}
@@ -187,7 +187,7 @@ def poll_slow_loop():
 # ═══════════════ WIDGET HTML ═══════════════
 
 WIDGET_HTML = r"""<!DOCTYPE html>
-<html lang="tr">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -225,7 +225,7 @@ WIDGET_HTML = r"""<!DOCTYPE html>
 
 <div class="header">
   <span class="title">⚡ PowerFlow</span>
-  <span class="status"><span class="live-dot"></span>Canlı</span>
+  <span class="status"><span class="live-dot"></span>Live</span>
 </div>
 
 <div class="info-row">
@@ -254,7 +254,7 @@ WIDGET_HTML = r"""<!DOCTYPE html>
     var gpu = data.gpu_power_w || 0.7;
     var ane = data.ane_power_w || 0.2;
     var socTotal = cpu+gpu+ane;
-    // Diğer = kalan (tam denge garantisi, yuvarlama hatası olmaz)
+    // Other = remainder (exact balance guarantee, no rounding error)
     var sysPower = data.total_power_w;
     if (data.battery_charging && data.power_source === 'AC') {
       sysPower = data.total_power_w - data.battery_power_w;
@@ -262,22 +262,22 @@ WIDGET_HTML = r"""<!DOCTYPE html>
     var otherPower = Math.max(0.5, +(sysPower - socTotal).toFixed(2));
 
     if (onAC) {
-      N('adapter', '🔌', 'Adaptör');
-      N('system',  '💻', 'Sistem');
+      N('adapter', '🔌', 'Adapter');
+      N('system',  '💻', 'System');
       if (chg) {
-        N('battery', '🔋', 'Batarya');
+        N('battery', '🔋', 'Battery');
         L('adapter','system', Math.max(2, sysPower));
         L('adapter','battery', data.battery_power_w);
       } else {
         L('adapter','system', data.total_power_w);
       }
     } else {
-      N('battery', '🔋', 'Batarya');
-      N('system',  '💻', 'Sistem');
+      N('battery', '🔋', 'Battery');
+      N('system',  '💻', 'System');
       L('battery','system', data.total_power_w);
     }
     N('soc',     '⚙',  'CPU/GPU');
-    N('other',   '⋯',  'Diğer');
+    N('other',   '⋯',  'Other');
     L('system','soc', socTotal);
     L('system','other', otherPower);
     return {nodes:nodes, links:links};
@@ -286,8 +286,8 @@ WIDGET_HTML = r"""<!DOCTYPE html>
   function render(data) {
     document.getElementById('srcIcon').textContent = data.power_source === 'AC' ? '🔌' : '🔋';
     document.getElementById('srcText').textContent = data.power_source === 'AC'
-      ? 'Adaptor · '+data.adapter_watts+'W · Batarya %'+data.battery_pct
-      : 'Pilde · Batarya %'+data.battery_pct;
+      ? 'Adapter · '+data.adapter_watts+'W · Battery '+data.battery_pct+'%'
+      : 'On battery · '+data.battery_pct+'%';
     document.getElementById('clock').textContent = data.ts;
 
     var g = buildGraph(data);
@@ -381,9 +381,9 @@ WIDGET_HTML = r"""<!DOCTYPE html>
     }),function(l){return l.value;});
 
     document.getElementById('stats').innerHTML = [
-      {v:totalIn.toFixed(1)+'W', l:'Giris'},
-      {v:data.total_power_w.toFixed(1)+'W', l:'Sistem'},
-      {v:'%'+data.battery_pct, l:'Batarya'},
+      {v:totalIn.toFixed(1)+'W', l:'Input'},
+      {v:data.total_power_w.toFixed(1)+'W', l:'System'},
+      {v:data.battery_pct+'%', l:'Battery'},
       {v:(data.cpu_power_w+data.gpu_power_w+data.ane_power_w).toFixed(1)+'W', l:'CPU/GPU'}
     ].map(function(s){return'<div class="st"><div class="v">'+s.v+'</div><div class="l">'+s.l+'</div></div>';}).join('');
   }
@@ -450,13 +450,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
 # ═══════════════ MAIN ═══════════════
 
 def main():
-    print("⚡ Mac Güç Sankey Widget")
+    print("⚡ Mac Power Sankey Widget")
     # Initial data
     fast = poll_fast()
     pm = poll_powermetrics()
     data = build_result(fast, pm)
     with _lock: _latest.update(data)
-    print(f"  ✓ Adaptör: {data['adapter_watts']}W | Batarya: %{data['battery_pct']}")
+    print(f"  ✓ Adapter: {data['adapter_watts']}W | Battery: {data['battery_pct']}%")
 
     # Start pollers (fast + slow parallel)
     threading.Thread(target=poll_fast_loop, daemon=True).start()
@@ -472,7 +472,7 @@ def main():
     x, y = int(sf.size.width - ww - 24), int(sf.size.height - wh - 24)
 
     webview.create_window(
-        title="Mac Güç Sankey",
+        title="Mac Power Sankey",
         url=f"http://127.0.0.1:{PORT}",
         width=ww, height=wh, x=x, y=y,
         frameless=False, on_top=False,
