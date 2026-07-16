@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PowerFlow</title>
+<script src="/d3.v7.min.js"></script>
+<script src="/d3-sankey.min.js"></script>
+<style>
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; color: #1d1d1f; display: flex; justify-content: center; padding: 20px; }
+  .card { width: 100%; max-width: 720px; background: #fff; border-radius: 18px; box-shadow: 0 2px 12px rgba(0,0,0,0.06); padding: 20px 22px 14px; }
+  .top { display:flex; align-items:center; gap:8px; margin-bottom:2px; }
+  h1 { font-size: 18px; font-weight: 700; }
+  .info { font-size: 12px; color: #86868b; margin-bottom: 6px; display:flex; align-items:center; gap:6px; }
+  .info .ts { margin-left:auto; font-size: 10px; font-family: monospace; color: #bbb; }
+  #chart { width:100%; height: 360px; background: #f9f9fc; border-radius: 10px; }
+  .stats { display:grid; grid-template-columns:repeat(4,1fr); gap: 6px; margin-top: 8px; }
+  .st { background: #f9f9fb; border-radius: 10px; padding: 8px 10px; text-align: center; }
+  .st .v { font-size: 18px; font-weight: 700; }
+  .st .l { font-size: 9px; color: #86868b; text-transform: uppercase; letter-spacing: 0.4px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="top"><h1>⚡ PowerFlow</h1></div>
+  <div class="info">
+    <span id="srcIcon">🔌</span><span id="srcText"></span>
+    <span class="ts" id="clock"></span>
+  </div>
+  <div id="chart"></div>
+  <div class="stats" id="stats"></div>
+</div>
+
+<script>
+(function() {
+  'use strict';
+  if (typeof d3 === 'undefined' || typeof d3.sankey === 'undefined') return;
+
+  var W=680, H=360, M={t:16,r:16,b:16,l:16};
+
+  function build(data) {
+    var ac = data.power_source === 'AC';
+    var chg = data.battery_charging && ac;
+    var total = data.total_w || 8;           // adapter total (system + charge)
+    var batW = data.battery_power_w || 0;     // charge power only
+    var sysPwr = data.system_power_w || total; // system internal power
+    var cpuW = data.cpu_w || 1.5;
+    var gpuW = data.gpu_w || 0.7;
+    var otherW = data.other_w || 3;
+
+    // Three layouts
+    if (ac && chg) {
+      return {
+        nodes: [
+          {id:'adapter', icon:'🔌', label:'Adaptör', color:'#0071e3'},
+          {id:'battery', icon:'🔋', label:'Batarya', color:'#34c759'},
+          {id:'system',  icon:'💻', label:'Sistem',  color:'#1d1d1f'},
+          {id:'soc',     icon:'⚙', label:'CPU/GPU',  color:'#ff6b35'},
+          {id:'other',   icon:'⋯', label:'Diğer',    color:'#af52de'},
+        ],
+        links: [
+          {source:'adapter', target:'battery', value: batW, color: '#34c759'},
+          {source:'adapter', target:'system',  value: sysPwr, color: '#0071e3'},
+          {source:'system',  target:'soc',     value: cpuW+gpuW, color: '#ff6b35'},
+          {source:'system',  target:'other',   value: otherW, color: '#af52de'},
+        ]
+      };
+    } else if (ac) {
+      return {
+        nodes: [
+          {id:'adapter', icon:'🔌', label:'Adaptör', color:'#0071e3'},
+          {id:'system',  icon:'💻', label:'Sistem',  color:'#1d1d1f'},
+          {id:'soc',     icon:'⚙', label:'CPU/GPU',  color:'#ff6b35'},
+          {id:'other',   icon:'⋯', label:'Diğer',    color:'#af52de'},
+        ],
+        links: [
+          {source:'adapter', target:'system', value: sysPwr, color: '#0071e3'},
+          {source:'system',  target:'soc',    value: cpuW+gpuW, color: '#ff6b35'},
+          {source:'system',  target:'other',  value: otherW, color: '#af52de'},
+        ]
+      };
+    } else {
+      return {
+        nodes: [
+          {id:'battery', icon:'🔋', label:'Batarya', color:'#34c759'},
+          {id:'system',  icon:'💻', label:'Sistem',  color:'#1d1d1f'},
+          {id:'soc',     icon:'⚙', label:'CPU/GPU',  color:'#ff6b35'},
+          {id:'other',   icon:'⋯', label:'Diğer',    color:'#af52de'},
+        ],
+        links: [
+          {source:'battery', target:'system', value: sysPwr, color: '#34c759'},
+          {source:'system',  target:'soc',    value: cpuW+gpuW, color: '#ff6b35'},
+          {source:'system',  target:'other',  value: otherW, color: '#af52de'},
+        ]
+      };
+    }
+  }
+
+  function render(data) {
+    if (!data || data.total_w == null) return;  // sunucu ilk ölçümü henüz yapmadı
+    document.getElementById('srcIcon').textContent = data.power_source === 'AC' ? '🔌' : '🔋';
+    var chg = data.battery_charging && data.power_source === 'AC';
+    document.getElementById('srcText').textContent = data.power_source === 'AC'
+      ? 'Adaptör · '+data.adapter_watts+'W' + (chg ? ' · Şarj oluyor' : '') + ' · Batarya %'+data.battery_pct
+      : 'Pilde · Batarya %'+data.battery_pct;
+    document.getElementById('clock').textContent = data.ts;
+
+    var g = build(data);
+    if (!g || g.nodes.length === 0) return;
+
+    var el = document.getElementById('chart');
+    W = el.clientWidth || 680;
+    el.innerHTML = '';
+
+    var svg = d3.select('#chart').append('svg')
+      .attr('viewBox','0 0 '+W+' '+H)
+      .attr('preserveAspectRatio','xMidYMid meet')
+      .style('width','100%').style('height','100%');
+
+    var defs = svg.append('defs');
+    var sh = defs.append('filter').attr('id','sh').attr('x','-10%').attr('y','-10%').attr('width','130%').attr('height','130%');
+    sh.append('feDropShadow').attr('dx',0).attr('dy',1).attr('stdDeviation',2).attr('flood-color','#000').attr('flood-opacity',0.07);
+
+    // Link gradients
+    g.links.forEach(function(l,i) {
+      var grad = defs.append('linearGradient').attr('id','lg'+i)
+        .attr('gradientUnits','userSpaceOnUse').attr('x1',0).attr('x2',1);
+      grad.append('stop').attr('offset','0%').attr('stop-color', l.color).attr('stop-opacity',0.45);
+      grad.append('stop').attr('offset','100%').attr('stop-color', l.color).attr('stop-opacity',0.7);
+    });
+
+    var sk = d3.sankey()
+      .nodeId(function(d){return d.id;})
+      .nodeWidth(24).nodePadding(20)
+      .nodeAlign(d3.sankeyLeft)
+      .extent([[M.l,M.t],[W-M.r,H-M.b]])(g);
+
+    // Update gradient coords
+    g.links.forEach(function(l,i) {
+      var sl = sk.links[i];
+      if (sl) defs.select('#lg'+i).attr('x1',sl.source.x1).attr('x2',sl.target.x0);
+    });
+
+    // Links
+    svg.append('g').attr('fill','none').selectAll('path')
+      .data(sk.links).join('path')
+      .attr('d', d3.sankeyLinkHorizontal())
+      .attr('stroke', function(_,i){return'url(#lg'+i+')';})
+      .attr('stroke-width', function(d){return Math.max(2.5, d.width);});
+
+    // Link labels
+    svg.append('g').selectAll('text').data(sk.links).join('text')
+      .attr('x', function(d){return (d.source.x1+d.target.x0)/2;})
+      .attr('y', function(d){return (d.y0+d.y1)/2 - 4;})
+      .attr('text-anchor','middle')
+      .attr('fill','#666').style('font-size','10px').style('font-weight','600')
+      .style('font-family','"SF Mono", Monaco, monospace')
+      .text(function(d){return d.value.toFixed(1)+'W';});
+
+    // Nodes
+    var ng = svg.append('g').selectAll('g').data(sk.nodes).join('g');
+
+    ng.append('rect')
+      .attr('x',function(d){return d.x0;})
+      .attr('y',function(d){return d.y0;})
+      .attr('width',function(d){return d.x1-d.x0;})
+      .attr('height',function(d){return Math.max(1,d.y1-d.y0);})
+      .attr('rx',7).attr('fill','#fff')
+      .attr('stroke','#e5e5ea').attr('stroke-width',0.5)
+      .attr('filter','url(#sh)');
+
+    ng.append('text')
+      .attr('x',function(d){return (d.x0+d.x1)/2;})
+      .attr('y',function(d){return (d.y0+d.y1)/2;})
+      .attr('dy','0.35em').attr('text-anchor','middle')
+      .style('font-size','14px')
+      .text(function(d){return d.icon;});
+
+    ng.append('text')
+      .attr('x',function(d){return d.x0<W/2 ? d.x1+10 : d.x0-10;})
+      .attr('y',function(d){return (d.y0+d.y1)/2;})
+      .attr('dy','0.35em')
+      .attr('text-anchor',function(d){return d.x0<W/2?'start':'end';})
+      .attr('fill','#1d1d1f').style('font-size','12px').style('font-weight','600')
+      .text(function(d){return d.label;});
+
+    document.getElementById('stats').innerHTML = [
+      {v:data.total_w.toFixed(1)+'W', l:'Toplam'},
+      {v:(data.cpu_w+data.gpu_w).toFixed(1)+'W', l:'CPU+GPU'},
+      {v:data.other_w.toFixed(1)+'W', l:'Diğer'},
+      {v:'%'+data.battery_pct, l:'Batarya'}
+    ].map(function(s){return'<div class="st"><div class="v">'+s.v+'</div><div class="l">'+s.l+'</div></div>';}).join('');
+  }
+
+  function fetchData() {
+    fetch('/api/power').then(function(r){return r.json();}).then(render).catch(function(){});
+  }
+  fetchData();
+  setInterval(fetchData, 3000);
+})();
+</script>
+</body>
+</html>
